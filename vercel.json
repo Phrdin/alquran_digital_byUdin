@@ -7,7 +7,11 @@
   },
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/", // Tangani Root URL secara spesifik
+      "dest": "api/index.php"
+    },
+    {
+      "src": "/(.*)", // Tangani semua URL lainnya
       "dest": "api/index.php"
     }
   ]
