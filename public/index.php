@@ -49,8 +49,6 @@ if ($mode === 'surah_list') {
     }
 
     // --- Efisiensi: Buat map nama Surah untuk pencarian cepat ---
-    // Key: Nama Surah yang sudah dinormalisasi (contoh: almaidah)
-    // Value: Data Surah lengkap
     $normalized_chapters = [];
     foreach ($chapters as $chapter) {
         $normalized_name = strtolower(str_replace([' ', '\'', 'al-'], '', $chapter['namaLatin']));
@@ -61,7 +59,7 @@ if ($mode === 'surah_list') {
     $juz_mapping = [
         1 => ['Al-Fatihah', 1], 2 => ['Al-Baqarah', 142], 3 => ['Al-Baqarah', 253], 4 => ['Ali Imran', 93],
         5 => ['An-Nisa\'', 24], 6 => ['An-Nisa\'', 148], 7 => ['Al-Ma\'idah', 83], 8 => ['Al-An\'am', 111],
-        9 => ['Al-A\'raf', 88], 10 => ['Al-Anfal', 41], 11 => ['At-Taubah', 93], 12 => ['Hud', 6],
+        9 => ['Al-A\'raf', 88], 10 => ['Al-Anfal', 41], 12 => ['Hud', 6],
         13 => ['Yusuf', 53], 14 => ['Al-Hijr', 1], 15 => ['Al-Isra', 1], 16 => ['Al-Kahf', 75],
         17 => ['Al-Anbiya', 1], 18 => ['Al-Mu\'minun', 1], 19 => ['Al-Furqan', 21], 20 => ['An-Naml', 56],
         21 => ['Al-Ankabut', 46], 22 => ['Al-Ahzab', 31], 23 => ['Yasin', 28], 24 => ['Az-Zumar', 32],
@@ -72,14 +70,13 @@ if ($mode === 'surah_list') {
     foreach ($juz_mapping as $nomor => $data) {
         list($surah_nama_latin, $ayat_awal) = $data;
         
-        // Normalisasi nama Juz untuk pencarian di map
         $search_name = strtolower(str_replace([' ', '\'', 'surat ', 'al-'], '', $surah_nama_latin));
         
         $surah_id = '#';
         if (isset($normalized_chapters[$search_name])) {
             $surah_id = $normalized_chapters[$search_name]['nomor'];
         } else {
-             // Fallback: coba cari menggunakan str_starts_with (kompatibel PHP 7.x)
+             // Fallback: coba cari menggunakan str_starts_with
              foreach ($normalized_chapters as $norm_name => $chapter) {
                  if (strpos($norm_name, $search_name) === 0) {
                      $surah_id = $chapter['nomor'];
@@ -158,9 +155,6 @@ curl_close($ch);
 // --- START HTML OUTPUT ---
 
 if ($mode === 'surah_list') {
-    // =======================================================
-    // TAMPILAN UNTUK DAFTAR SURAH (INDEX VIEW)
-    // =======================================================
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -170,7 +164,6 @@ if ($mode === 'surah_list') {
     <title>Daftar Surah Al-Qur'an</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
@@ -187,7 +180,6 @@ if ($mode === 'surah_list') {
                     fontFamily: {
                         'sans': ['Inter', 'sans-serif'],
                         'arabic-amiri': ['Amiri', 'serif'], 
-                        'arabic-naskh': ['Noto Naskh Arabic', 'serif'], 
                     }
                 }
             }
@@ -227,7 +219,7 @@ if ($mode === 'surah_list') {
         
         <?php if ($error): ?>
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                <strong class="font-bold">Error API:</strong>
+                <strong class="font-bold">Error:</strong>
                 <span class="block sm:inline"><?= $error ?></span>
             </div>
         <?php endif; ?>
@@ -262,7 +254,6 @@ if ($mode === 'surah_list') {
                     $nama_arab = htmlspecialchars($chapter['nama'] ?? 'اسم السورة');
                     $arti = htmlspecialchars($chapter['arti'] ?? 'Terjemahan');
                     $jumlah_ayat = htmlspecialchars($chapter['jumlahAyat'] ?? '?');
-                    $tempat_turun = htmlspecialchars($chapter['tempatTurun'] ?? '?');
             ?>
                 <a href="?id=<?= $nomor ?>" 
                     class="surah-card-wrapper surah-item block p-4 bg-white rounded-lg border border-gray-200 
@@ -382,14 +373,10 @@ if ($mode === 'surah_list') {
             contentSurah.classList.toggle('hidden', !isSurah);
             contentJuz.classList.toggle('hidden', isSurah);
 
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`tab-${tab}`).classList.add('active');
-
-            tabSurah.classList.toggle('text-quran-primary', isSurah);
-            tabSurah.classList.toggle('text-gray-500', !isSurah);
+            tabButtons.forEach(btn => btn.classList.remove('active', 'text-quran-primary', 'text-gray-500'));
             
-            tabJuz.classList.toggle('text-quran-primary', !isSurah);
-            tabJuz.classList.toggle('text-gray-500', isSurah);
+            document.getElementById(`tab-${tab}`).classList.add('active', 'text-quran-primary');
+            document.querySelectorAll(`.tab-button:not(#tab-${tab})`).forEach(btn => btn.classList.add('border-transparent', 'text-gray-500'));
 
             searchInput.value = '';
             filterItems('');
@@ -403,7 +390,7 @@ if ($mode === 'surah_list') {
 
         document.addEventListener('DOMContentLoaded', () => {
             loadLastRead();
-            // Inisialisasi tab di sini setelah loadLastRead
+            // Inisialisasi tab
             const initialTab = (window.location.hash.startsWith('#juz') ? 'juz' : 'surah');
             switchTab(initialTab);
         });
