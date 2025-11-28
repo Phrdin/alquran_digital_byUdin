@@ -18,6 +18,14 @@ if ($nomor_surah && is_numeric($nomor_surah) && $nomor_surah_int >= 1 && $nomor_
     $mode = 'surah_detail';
 }
 
+// --- Fungsi Helper untuk Kompatibilitas PHP 7.x ---
+// Mengganti str_starts_with()
+if (!function_exists('str_starts_with')) {
+    function str_starts_with(string $haystack, string $needle): bool {
+        return strpos($haystack, $needle) === 0;
+    }
+}
+
 // --- Logic Data Fetching ---
 
 $ch = curl_init();
@@ -40,31 +48,50 @@ if ($mode === 'surah_list') {
         }
     }
 
+    // --- Efisiensi: Buat map nama Surah untuk pencarian cepat ---
+    // Key: Nama Surah yang sudah dinormalisasi (contoh: almaidah)
+    // Value: Data Surah lengkap
+    $normalized_chapters = [];
+    foreach ($chapters as $chapter) {
+        $normalized_name = strtolower(str_replace([' ', '\'', 'al-'], '', $chapter['namaLatin']));
+        $normalized_chapters[$normalized_name] = $chapter;
+    }
+
     // 2. Mapping data Juz Akurat
     $juz_mapping = [
-        1 => ['Surat Al-Fatihah', 1], 2 => ['Surat Al-Baqarah', 142], 3 => ['Surat Al-Baqarah', 253], 4 => ['Surat Ali Imran', 93],
-        5 => ['Surat An-Nisa\'', 24], 6 => ['Surat An-Nisa\'', 148], 7 => ['Surat Al-Ma\'idah', 83], 8 => ['Surat Al-An\'am', 111],
-        9 => ['Surat Al-A\'raf', 88], 10 => ['Surat Al-Anfal', 41], 11 => ['Surat At-Taubah', 93], 12 => ['Surat Hud', 6],
-        13 => ['Surat Yusuf', 53], 14 => ['Surat Al-Hijr', 1], 15 => ['Surat Al-Isra', 1], 16 => ['Surat Al-Kahf', 75],
-        17 => ['Surat Al-Anbiya', 1], 18 => ['Surat Al-Mu\'minun', 1], 19 => ['Surat Al-Furqan', 21], 20 => ['Surat An-Naml', 56],
-        21 => ['Surat Al-Ankabut', 46], 22 => ['Surat Al-Ahzab', 31], 23 => ['Surat Yasin', 28], 24 => ['Surat Az-Zumar', 32],
-        25 => ['Surat Fussilat', 47], 26 => ['Surat Al-Ahqaf', 1], 27 => ['Surat Adz Dzariyat', 31], 28 => ['Surat Al-Mujadilah', 1],
-        29 => ['Surat Al-Mulk', 1], 30 => ['Surat An-Naba\'', 1],
+        1 => ['Al-Fatihah', 1], 2 => ['Al-Baqarah', 142], 3 => ['Al-Baqarah', 253], 4 => ['Ali Imran', 93],
+        5 => ['An-Nisa\'', 24], 6 => ['An-Nisa\'', 148], 7 => ['Al-Ma\'idah', 83], 8 => ['Al-An\'am', 111],
+        9 => ['Al-A\'raf', 88], 10 => ['Al-Anfal', 41], 11 => ['At-Taubah', 93], 12 => ['Hud', 6],
+        13 => ['Yusuf', 53], 14 => ['Al-Hijr', 1], 15 => ['Al-Isra', 1], 16 => ['Al-Kahf', 75],
+        17 => ['Al-Anbiya', 1], 18 => ['Al-Mu\'minun', 1], 19 => ['Al-Furqan', 21], 20 => ['An-Naml', 56],
+        21 => ['Al-Ankabut', 46], 22 => ['Al-Ahzab', 31], 23 => ['Yasin', 28], 24 => ['Az-Zumar', 32],
+        25 => ['Fussilat', 47], 26 => ['Al-Ahqaf', 1], 27 => ['Adz Dzariyat', 31], 28 => ['Al-Mujadilah', 1],
+        29 => ['Al-Mulk', 1], 30 => ['An-Naba\'', 1],
     ];
     
     foreach ($juz_mapping as $nomor => $data) {
         list($surah_nama_latin, $ayat_awal) = $data;
-        $surah_info = array_filter($chapters, function($chapter) use ($surah_nama_latin) {
-            $normalized_api_name = strtolower(str_replace([' ', '\''], '', $chapter['namaLatin']));
-            $normalized_map_name = strtolower(str_replace([' ', '\''], '', str_replace(['Surat ', 'Al-'], '', $surah_nama_latin)));
-            return str_starts_with($normalized_api_name, $normalized_map_name);
-        });
+        
+        // Normalisasi nama Juz untuk pencarian di map
+        $search_name = strtolower(str_replace([' ', '\'', 'surat ', 'al-'], '', $surah_nama_latin));
+        
+        $surah_id = '#';
+        if (isset($normalized_chapters[$search_name])) {
+            $surah_id = $normalized_chapters[$search_name]['nomor'];
+        } else {
+             // Fallback: coba cari menggunakan str_starts_with (kompatibel PHP 7.x)
+             foreach ($normalized_chapters as $norm_name => $chapter) {
+                 if (strpos($norm_name, $search_name) === 0) {
+                     $surah_id = $chapter['nomor'];
+                     break;
+                 }
+             }
+        }
 
-        $surah_id = !empty($surah_info) ? array_values($surah_info)[0]['nomor'] : '#';
         $juz_list[] = [
             'nomor' => $nomor,
             'nama_latin' => "Juz {$nomor}",
-            'keterangan' => "Mulai: {$surah_nama_latin} Ayat {$ayat_awal}",
+            'keterangan' => "Mulai: Surat {$surah_nama_latin} Ayat {$ayat_awal}",
             'surah_id' => $surah_id,
             'ayat_awal' => $ayat_awal,
         ];
@@ -83,26 +110,48 @@ if ($mode === 'surah_list') {
 
     $data = json_decode($response, true);
 
-    if (!isset($data['data']) || $http_code != 200) {
-        die("<h1>Gagal memuat data Surah.</h1><p>Status: $http_code. Coba periksa koneksi atau URL API.</p>");
+    if (!isset($data['data']) || $http_code != 200 || empty($data['data'])) {
+        // Gagal memuat data, kembali ke tampilan daftar Surah dengan pesan error
+        $error = "Gagal memuat data Surah {$nomor_surah}. (Status: {$http_code}). Coba periksa ID Surah atau koneksi API.";
+        $mode = 'surah_list';
+        
+        // Coba fetch chapters lagi jika gagal detail (untuk tampilan index)
+        if (empty($chapters)) {
+             $ch_index = curl_init();
+             curl_setopt($ch_index, CURLOPT_URL, $api_url);
+             curl_setopt($ch_index, CURLOPT_RETURNTRANSFER, 1);
+             $response_index = curl_exec($ch_index);
+             $data_index = json_decode($response_index, true);
+             if (isset($data_index['data'])) {
+                $chapters = $data_index['data'];
+             }
+             curl_close($ch_index);
+        }
+        
+    } else {
+        $surah_data = $data['data'];
+
+        $nama_latin     = $surah_data['namaLatin'] ?? 'Tidak diketahui';
+        $nama_arab      = $surah_data['nama'] ?? '';
+        $arti           = $surah_data['arti'] ?? '';
+        $jumlah_ayat    = $surah_data['jumlahAyat'] ?? '';
+        $tempat_turun   = $surah_data['tempatTurun'] ?? '';
+        $ayat           = $surah_data['ayat'] ?? [];
+
+        $prev_surah_id = $nomor_surah_int > 1 ? $nomor_surah_int - 1 : null;
+        $next_surah_id = $nomor_surah_int < 114 ? $nomor_surah_int + 1 : null;
+        $surah_number_padded = str_pad($nomor_surah, 3, '0', STR_PAD_LEFT);
+
+        $qari_list = [ 
+            '01' => 'Abdullah Al-Juhany', 
+            '02' => 'Abdul Muhsin Al-Qasim', 
+            '03' => 'Abdurrahman As-Sudais', 
+            '04' => 'Ibrahim Al-Dossari', 
+            '05' => 'Misyari Rasyid Al-Afasy', 
+        ];
+        $default_qari = '05'; 
+        $audio_full_url = $surah_data['audioFull'][$default_qari] ?? null;
     }
-
-    $surah_data = $data['data'];
-
-    $nama_latin     = $surah_data['namaLatin'] ?? 'Tidak diketahui';
-    $nama_arab      = $surah_data['nama'] ?? '';
-    $arti           = $surah_data['arti'] ?? '';
-    $jumlah_ayat    = $surah_data['jumlahAyat'] ?? '';
-    $tempat_turun   = $surah_data['tempatTurun'] ?? '';
-    $ayat           = $surah_data['ayat'] ?? [];
-
-    $prev_surah_id = $nomor_surah_int > 1 ? $nomor_surah_int - 1 : null;
-    $next_surah_id = $nomor_surah_int < 114 ? $nomor_surah_int + 1 : null;
-    $surah_number_padded = str_pad($nomor_surah, 3, '0', STR_PAD_LEFT);
-
-    $qari_list = [ '01' => 'Abdullah Al-Juhany', '02' => 'Abdul Muhsin Al-Qasim', '03' => 'Abdurrahman As-Sudais', '04' => 'Ibrahim Al-Dossari', '05' => 'Misyari Rasyid Al-Afasy', ];
-    $default_qari = '05'; 
-    $audio_full_url = $surah_data['audioFull'][$default_qari] ?? null;
 }
 curl_close($ch);
 
@@ -157,6 +206,11 @@ if ($mode === 'surah_list') {
         .surah-card-wrapper:hover {
              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         }
+        .tab-button.active {
+            border-bottom-width: 2px;
+            border-color: theme('colors.quran-accent');
+            color: theme('colors.quran-primary');
+        }
     </style>
 </head>
 
@@ -187,11 +241,11 @@ if ($mode === 'surah_list') {
 
         <div class="mb-6">
             <input type="text" id="search-input" placeholder="Cari Surah atau Juz (e.g. Al-Baqarah)"
-                   class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-quran-accent transition-shadow">
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-quran-accent transition-shadow">
         </div>
         
         <div class="flex border-b border-gray-200 mb-6">
-            <button id="tab-surah" data-tab="surah" class="tab-button px-4 py-2 text-sm font-medium border-b-2 border-quran-accent text-quran-primary transition-colors duration-200">
+            <button id="tab-surah" data-tab="surah" class="tab-button active px-4 py-2 text-sm font-medium border-b-2 border-quran-accent text-quran-primary transition-colors duration-200">
                 Daftar Surah
             </button>
             <button id="tab-juz" data-tab="juz" class="tab-button px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors duration-200">
@@ -211,10 +265,10 @@ if ($mode === 'surah_list') {
                     $tempat_turun = htmlspecialchars($chapter['tempatTurun'] ?? '?');
             ?>
                 <a href="?id=<?= $nomor ?>" 
-                   class="surah-card-wrapper surah-item block p-4 bg-white rounded-lg border border-gray-200 
-                          hover:border-quran-accent transition duration-200 ease-in-out"
-                   data-search="<?= strtolower($nama_latin . ' ' . $arti) ?>"
-                   data-nomor="<?= $nomor ?>">
+                    class="surah-card-wrapper surah-item block p-4 bg-white rounded-lg border border-gray-200 
+                             hover:border-quran-accent transition duration-200 ease-in-out"
+                    data-search="<?= strtolower($nama_latin . ' ' . $arti) ?>"
+                    data-nomor="<?= $nomor ?>">
                     
                     <div class="flex items-center justify-between">
                         
@@ -241,7 +295,7 @@ if ($mode === 'surah_list') {
             <?php 
                 endforeach; 
             else:
-                echo '<p class="text-center text-gray-500 col-span-3">Gagal memuat data Surah dari API.</p>';
+                echo '<p class="text-center text-gray-500 col-span-3">Gagal memuat data Surah dari API. Periksa koneksi atau URL API.</p>';
             endif; 
             ?>
         </div>
@@ -249,9 +303,9 @@ if ($mode === 'surah_list') {
         <div id="content-juz" class="grid grid-cols-1 md:grid-cols-2 gap-3 hidden">
             <?php foreach ($juz_list as $juz): ?>
                 <a href="?id=<?= $juz['surah_id'] ?>#ayat-<?= $juz['ayat_awal'] ?>" 
-                   class="surah-card-wrapper juz-item block p-4 bg-white rounded-lg border border-gray-200 
-                          hover:border-quran-accent transition duration-200 ease-in-out"
-                   data-search="<?= strtolower($juz['nama_latin'] . ' ' . $juz['keterangan']) ?>">
+                    class="surah-card-wrapper juz-item block p-4 bg-white rounded-lg border border-gray-200 
+                             hover:border-quran-accent transition duration-200 ease-in-out"
+                    data-search="<?= strtolower($juz['nama_latin'] . ' ' . $juz['keterangan']) ?>">
                     
                     <div class="flex items-center justify-between">
                         
@@ -294,6 +348,7 @@ if ($mode === 'surah_list') {
         const juzItems = document.querySelectorAll('.juz-item');
         const lastReadCard = document.getElementById('last-read-card');
         const lastReadLink = document.getElementById('last-read-link');
+        const tabButtons = document.querySelectorAll('.tab-button');
         
         let activeTab = 'surah';
 
@@ -327,27 +382,30 @@ if ($mode === 'surah_list') {
             contentSurah.classList.toggle('hidden', !isSurah);
             contentJuz.classList.toggle('hidden', isSurah);
 
-            tabSurah.classList.toggle('border-quran-accent', isSurah);
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+
             tabSurah.classList.toggle('text-quran-primary', isSurah);
-            tabSurah.classList.toggle('border-transparent', !isSurah);
             tabSurah.classList.toggle('text-gray-500', !isSurah);
             
-            tabJuz.classList.toggle('border-quran-accent', !isSurah);
             tabJuz.classList.toggle('text-quran-primary', !isSurah);
-            tabJuz.classList.toggle('border-transparent', isSurah);
             tabJuz.classList.toggle('text-gray-500', isSurah);
 
             searchInput.value = '';
             filterItems('');
         };
-
-        tabSurah.addEventListener('click', () => switchTab('surah'));
-        tabJuz.addEventListener('click', () => switchTab('juz'));
+        
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => switchTab(e.currentTarget.getAttribute('data-tab')));
+        });
+        
         searchInput.addEventListener('keyup', (e) => filterItems(e.target.value));
 
         document.addEventListener('DOMContentLoaded', () => {
             loadLastRead();
-            switchTab('surah');
+            // Inisialisasi tab di sini setelah loadLastRead
+            const initialTab = (window.location.hash.startsWith('#juz') ? 'juz' : 'surah');
+            switchTab(initialTab);
         });
     </script>
 </body>
@@ -389,15 +447,9 @@ if ($mode === 'surah_list') {
                     },
                     fontFamily: {
                         'latin-sans': ['Inter', 'sans-serif'],
-                        'latin-serif': ['Georgia', 'serif'],
-                        'latin-mono': ['monospace'],
-                        'latin-poppins': ['Poppins', 'sans-serif'],
-                        'latin-roboto': ['Roboto', 'sans-serif'],
                         'arabic-amiri': ['Amiri', 'serif'],
                         'arabic-naskh': ['Noto Naskh Arabic', 'serif'],
                         'arabic-kufi': ['Scheherazade New', 'serif'],
-                        'arabic-reem': ['Reem Kufi Ink', 'serif'],
-                        'arabic-ruqaa': ['Aref Ruqaa', 'serif'],
                     }
                 }
             }
@@ -441,10 +493,10 @@ if ($mode === 'surah_list') {
     <audio id="audio-player" src="<?= $audio_full_url ?>" preload="none"></audio>
     <audio id="ayat-audio-player" preload="none"></audio>
 
-    <header class="bg-white dark:bg-dark-card shadow-sm sticky top-0 z-20 border-b border-gray-200 dark:border-gray-700">
+    <header class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-20 border-b border-gray-200 dark:border-gray-700">
         <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             
-            <a href="?id=" class="text-quran-accent hover:text-quran-primary text-sm font-medium flex items-center space-x-1">
+            <a href="?" class="text-quran-accent hover:text-quran-primary text-sm font-medium flex items-center space-x-1">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                 </svg>
@@ -455,13 +507,13 @@ if ($mode === 'surah_list') {
                 
                 <div class="flex space-x-2 text-sm font-medium">
                     <a href="?id=<?= $prev_surah_id ?>" 
-                       class="nav-link <?= $prev_surah_id ? 'hover:text-quran-accent' : 'opacity-40 cursor-default' ?>">
-                       &lt;
+                        class="nav-link <?= $prev_surah_id ? 'hover:text-quran-accent' : 'opacity-40 cursor-default' ?>">
+                        &lt;
                     </a>
                     <span class="text-quran-primary dark:text-white font-bold">QS. <?= $nomor_surah ?></span>
                     <a href="?id=<?= $next_surah_id ?>" 
-                       class="nav-link <?= $next_surah_id ? 'hover:text-quran-accent' : 'opacity-40 cursor-default' ?>">
-                       &gt;
+                        class="nav-link <?= $next_surah_id ? 'hover:text-quran-accent' : 'opacity-40 cursor-default' ?>">
+                        &gt;
                     </a>
                 </div>
 
@@ -488,26 +540,18 @@ if ($mode === 'surah_list') {
 
         <div class="space-y-6">
             <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <label for="font-size-slider" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Ukuran Font</label>
+                <label for="font-size-slider" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Ukuran Font Arab</label>
                 <input type="range" min="1.5" max="3.5" step="0.25" value="2.0" id="font-size-slider" class="w-full h-2 bg-quran-accent rounded-lg appearance-none cursor-pointer dark:bg-gray-600">
             </div>
 
             <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <span class="text-gray-700 dark:text-gray-300 font-medium">Quran Tajweed</span>
+                <span class="text-gray-700 dark:text-gray-300 font-medium">Tajwid (Warna)</span>
                 <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="tajwid-toggle" class="sr-only peer">
                     <div class="w-11 h-6 bg-gray-300 peer-checked:after:translate-x-full peer-checked:bg-quran-primary dark:bg-gray-600 rounded-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-500"></div>
                 </label>
             </div>
             
-            <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg opacity-50 cursor-not-allowed">
-                <span class="text-gray-700 dark:text-gray-300 font-medium">Quran Isyarat</span>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" disabled class="sr-only peer">
-                    <div class="w-11 h-6 bg-gray-300 rounded-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-                </label>
-            </div>
-
             <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <span class="text-gray-700 dark:text-gray-300 font-medium">Transliterasi (Latin)</span>
                 <label class="relative inline-flex items-center cursor-pointer">
@@ -524,15 +568,6 @@ if ($mode === 'surah_list') {
                 </label>
             </div>
             
-            <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <span class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Pilih Bahasa Terjemah</span>
-                <div class="flex flex-wrap gap-2">
-                    <button class="lang-btn bg-quran-accent text-white px-3 py-1 rounded-full text-xs font-semibold" data-lang="ID">ID</button>
-                    <button class="lang-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs font-semibold" data-lang="EN">EN</button>
-                    <button class="lang-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs font-semibold" data-lang="MY">MY</button>
-                </div>
-            </div>
-
             <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <label for="qari-select-settings" class="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Pilih Qori</label>
                 <select id="qari-select-settings" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
@@ -560,8 +595,8 @@ if ($mode === 'surah_list') {
                 Murottal: <?= $qari_list[$default_qari] ?>
             </span>
             <button id="play-pause-btn" 
-                    class="bg-quran-primary text-white p-2 rounded-full flex items-center shadow-lg hover:bg-quran-accent transition-colors duration-200 disabled:opacity-50"
-                    <?= $audio_full_url ? '' : 'disabled' ?>>
+                     class="bg-quran-primary text-white p-2 rounded-full flex items-center shadow-lg hover:bg-quran-accent transition-colors duration-200 disabled:opacity-50"
+                     <?= $audio_full_url ? '' : 'disabled' ?>>
                 <span id="audio-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.985V5.653Z" />
@@ -596,17 +631,17 @@ if ($mode === 'surah_list') {
                         <div class="flex items-center space-x-3 text-gray-500 dark:text-gray-400">
                              <button class="play-ayat-btn hover:text-quran-accent transition-colors duration-150" data-ayat="<?= $a['nomorAyat'] ?>">
                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-                                </svg>
+                                     <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                                 </svg>
                              </button>
                              <span class="text-sm font-semibold"><?= htmlspecialchars($a['nomorAyat']) ?></span>
                         </div>
-                         
-                        <button class="text-gray-500 dark:text-gray-400 hover:text-quran-accent transition-colors duration-150">
+                        <button class="text-gray-500 dark:text-gray-400 hover:text-quran-accent transition-colors duration-150 last-read-save-btn" data-ayat-nomor="<?= $a['nomorAyat'] ?>" title="Tandai sebagai Terakhir Dibaca">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM12 12.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM12 18.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
                             </svg>
+
                         </button>
                     </div>
 
@@ -615,6 +650,7 @@ if ($mode === 'surah_list') {
                             $teks_arab = htmlspecialchars($a['teksArab']);
                             $words = explode(' ', $teks_arab);
                             
+                            // Logika penambahan class tajwid contoh (hanya untuk Al-Fatihah 1:4 dan 1:7)
                             foreach ($words as $index => $word) {
                                 $class = 'word';
                                 if ($nomor_surah == 1 && $a['nomorAyat'] == 4 && $index == 1) { $class .= ' tajwid-ghunnah'; } 
@@ -646,6 +682,7 @@ if ($mode === 'surah_list') {
         const html = document.documentElement;
         const qariList = <?= json_encode($qari_list) ?>;
         const surahNumberPadded = '<?= $surah_number_padded ?>';
+        const surahName = '<?= addslashes($nama_latin) ?>';
         const surahAudioBaseUrl = 'https://cdn.equran.id/audio-full/'; 
         
         const themeToggle = document.getElementById('theme-toggle');
@@ -655,11 +692,14 @@ if ($mode === 'surah_list') {
         const transliterationToggle = document.getElementById('transliteration-toggle');
         const translationToggle = document.getElementById('translation-toggle');
         const ayatAudioPlayer = document.getElementById('ayat-audio-player');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const audioPlayer = document.getElementById('audio-player');
         
         const settingsToggle = document.getElementById('settings-toggle');
         const settingsPanel = document.getElementById('settings-panel');
         const closeSettings = document.getElementById('close-settings');
         
+        // --- Toggles ---
         const toggleVisibility = () => {
             html.classList.toggle('hide-transliteration', !transliterationToggle.checked);
             html.classList.toggle('hide-translation', !translationToggle.checked);
@@ -675,19 +715,24 @@ if ($mode === 'surah_list') {
             localStorage.setItem('arabicFontSize', size);
         };
         
-        const updateAudioQari = (qariId) => {
+        const updateQariDisplay = (qariId) => {
+            const qariName = qariList[qariId];
+            document.getElementById('current-qari-display').textContent = `Murottal: ${qariName}`;
             localStorage.setItem('selectedQari', qariId);
+        };
+        
+        // --- Audio Controls ---
+        const qariPathMap = {
+            '01': 'Abdullah-Al-Juhany',
+            '02': 'Abdul-Muhsin-Al-Qasim',
+            '03': 'Abdurrahman-as-Sudais',
+            '04': 'Ibrahim-Al-Dossari',
+            '05': 'Misyari-Rasyid-Al-Afasy'
         };
 
         const playAyat = (ayatNumber) => {
             const qariId = qariSelectSettings.value;
-            let qariPath;
-            if (qariId === '01') qariPath = 'Abdullah-Al-Juhany';
-            else if (qariId === '02') qariPath = 'Abdul-Muhsin-Al-Qasim';
-            else if (qariId === '03') qariPath = 'Abdurrahman-as-Sudais';
-            else if (qariId === '04') qariPath = 'Ibrahim-Al-Dossari';
-            else if (qariId === '05') qariPath = 'Misyari-Rasyid-Al-Afasy';
-            
+            const qariPath = qariPathMap[qariId];
             const ayatPadded = String(ayatNumber).padStart(3, '0');
             const newUrl = `${surahAudioBaseUrl}${qariPath}/${surahNumberPadded}${ayatPadded}.mp3`;
             
@@ -695,7 +740,7 @@ if ($mode === 'surah_list') {
             ayatAudioPlayer.play();
             
             document.querySelectorAll('.play-ayat-btn').forEach(btn => {
-                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>`;
+                 btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>`;
             });
             const currentBtn = document.querySelector(`.play-ayat-btn[data-ayat="${ayatNumber}"]`);
             if(currentBtn) {
@@ -707,8 +752,38 @@ if ($mode === 'surah_list') {
             }, { once: true });
         };
         
+        playPauseBtn.addEventListener('click', () => {
+            if (audioPlayer.paused) {
+                audioPlayer.play();
+            } else {
+                audioPlayer.pause();
+            }
+        });
+        
+        audioPlayer.addEventListener('play', () => {
+            document.getElementById('audio-status').textContent = 'Menghentikan Surah';
+            document.getElementById('audio-icon').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>`;
+        });
 
+        audioPlayer.addEventListener('pause', () => {
+            document.getElementById('audio-status').textContent = 'Putar Surah';
+            document.getElementById('audio-icon').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.985V5.653Z" /></svg>`;
+        });
+
+        // --- Last Read Save/Load ---
+        const saveLastRead = (ayatNum = 1) => {
+            const surahId = '<?= $nomor_surah ?>';
+            const lastReadData = {
+                surahId: surahId,
+                surahName: surahName,
+                ayatNumber: ayatNum
+            };
+            localStorage.setItem('lastRead', JSON.stringify(lastReadData));
+        };
+        
+        // --- Initialization ---
         const initSettings = () => {
+            // Load Settings
             const savedFontSize = localStorage.getItem('arabicFontSize') || '2.0';
             fontSizeSlider.value = savedFontSize;
             updateFontSize(savedFontSize);
@@ -724,6 +799,7 @@ if ($mode === 'surah_list') {
             
             toggleVisibility();
 
+            // Theme Toggle
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 html.classList.add('dark');
@@ -734,10 +810,11 @@ if ($mode === 'surah_list') {
                 else { html.classList.remove('dark'); localStorage.setItem('theme', 'light'); }
             });
             
+            // Qari Select
             const savedQari = localStorage.getItem('selectedQari') || '<?= $default_qari ?>';
             qariSelectSettings.value = savedQari;
-            updateAudioQari(savedQari);
-            qariSelectSettings.addEventListener('change', (e) => updateAudioQari(e.target.value));
+            updateQariDisplay(savedQari);
+            qariSelectSettings.addEventListener('change', (e) => updateQariDisplay(e.target.value));
 
             document.querySelectorAll('.play-ayat-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -745,9 +822,20 @@ if ($mode === 'surah_list') {
                      playAyat(ayatNum);
                 });
             });
+            
+            document.querySelectorAll('.last-read-save-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const ayatNum = e.currentTarget.getAttribute('data-ayat-nomor');
+                    saveLastRead(ayatNum);
+                    alert(`Tandai Surah ${surahName} Ayat ${ayatNum} sebagai terakhir dibaca.`);
+                });
+            });
 
+
+            // Settings Panel Logic
             settingsToggle.addEventListener('click', () => {
-                settingsPanel.classList.remove('translate-x-full', 'hidden');
+                settingsPanel.classList.remove('hidden', 'translate-x-full');
                 settingsPanel.classList.add('translate-x-0');
             });
 
@@ -756,17 +844,7 @@ if ($mode === 'surah_list') {
                 settingsPanel.classList.add('translate-x-full', 'hidden');
             });
             
-            const saveLastRead = (ayatNum = 1) => {
-                const surahId = '<?= $nomor_surah ?>';
-                const surahName = '<?= addslashes($nama_latin) ?>';
-                const lastReadData = {
-                    surahId: surahId,
-                    surahName: surahName,
-                    ayatNumber: ayatNum
-                };
-                localStorage.setItem('lastRead', JSON.stringify(lastReadData));
-            };
-            
+            // Handle scrolling for last read marker on page load
             if (window.location.hash) {
                 const targetId = window.location.hash.substring(1);
                 const targetElement = document.getElementById(targetId);
