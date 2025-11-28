@@ -1,20 +1,14 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "/public/index.php",
-      "use": "@vercel/php"
+  "functions": {
+    "index.php": {
+      "runtime": "@vercel/php@0.6.0"
     }
-  ],
+  },
   "routes": [
-    { 
-      "src": "/surah/(?<id>[0-9]+)", 
-      "dest": "/index.php?id=$id" 
-    },
-    { 
-      "src": "/(.*)", 
-      "dest": "/index.php" 
+    {
+      "src": "/(.*)",
+      "dest": "index.php"
     }
   ]
-
 }
