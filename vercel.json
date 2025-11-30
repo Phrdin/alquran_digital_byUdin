@@ -1,18 +1,19 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.php": {
-      "runtime": "@vercel/php@0.6.0"
+  "builds": [
+    {
+      "src": "index.php",
+      "use": "@vercel/php"
     }
-  },
+  ],
   "routes": [
-    {
-      "src": "/", // Tangani Root URL secara spesifik
-      "dest": "api/index.php"
+    { 
+        "src": "/surah/(?<id>[0-9]+)", 
+        "dest": "/index.php?id=$id" 
     },
-    {
-      "src": "/(.*)", // Tangani semua URL lainnya
-      "dest": "api/index.php"
+    { 
+        "src": "/(.*)", 
+        "dest": "/index.php" 
     }
   ]
 }
