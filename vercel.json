@@ -2,19 +2,18 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.php",  
-      "use": "@vercel/php"
+      "src": "index.php",
+      "use": "@php-runtime/vercel-php@0.7.0"
     }
   ],
   "routes": [
     { 
         "src": "/surah/(?<id>[0-9]+)", 
-        "dest": "/api/index.php?id=$id" 
+        "dest": "/index.php?id=$id" 
     },
     { 
         "src": "/(.*)", 
-        "dest": "/api/index.php" 
+        "dest": "/index.php" 
     }
   ]
 }
-
