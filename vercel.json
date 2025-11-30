@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.php",  <--- JALUR SUDAH DIPERBARUI
+      "src": "api/index.php",  
       "use": "@vercel/php"
     }
   ],
@@ -17,3 +17,4 @@
     }
   ]
 }
+
