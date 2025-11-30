@@ -2,18 +2,18 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.php",
+      "src": "api/index.php",  <--- JALUR SUDAH DIPERBARUI
       "use": "@vercel/php"
     }
   ],
   "routes": [
     { 
         "src": "/surah/(?<id>[0-9]+)", 
-        "dest": "/index.php?id=$id" 
+        "dest": "/api/index.php?id=$id" 
     },
     { 
         "src": "/(.*)", 
-        "dest": "/index.php" 
+        "dest": "/api/index.php" 
     }
   ]
 }
