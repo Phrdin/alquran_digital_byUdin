@@ -1,0 +1,10 @@
+# Direktori Build Vercel
+.vercel/
+
+# File Temporary & Cache
+*.log
+*.tmp
+*.bak
+.DS_Store 
+Thumbs.db 
+/vendor
